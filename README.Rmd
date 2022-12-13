@@ -338,3 +338,76 @@ Export.table.toDrive({
 });
 ```
 
+# Data harmonization
+
+We now get all the datasets together, first the CO dataset
+
+```{r}
+median <- readr::read_csv("medianHighRes.csv") %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(system_index, area, ciudad, median)
+
+p90 <- readr::read_csv("p90COHighRes.csv") %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(system_index, area, ciudad, median) %>% 
+  rename(CO_p90 = median) %>% 
+  dplyr::select(system_index, area, ciudad, CO_p90)
+
+p10 <- readr::read_csv("p10COHighRes.csv")%>% 
+  janitor::clean_names() %>% 
+  dplyr::select(system_index, area, ciudad, median) %>% 
+  rename(CO_p10 = median) %>% 
+  dplyr::select(system_index, area, ciudad, CO_p10)
+
+NewVariables <- list(median, p90, p10) %>% 
+  purrr::reduce(full_join) %>% 
+  dplyr::select(-system_index) %>% 
+  dplyr::group_by(ciudad) %>%
+  summarise_at(c("median", "CO_p90", "CO_p10"), ~weighted.mean(.x, w = area), na.rm = TRUE) %>% 
+  rename(CO_median = median)
+```
+
+Then we add the River dataset
+
+```{r}
+median <- readr::read_csv("medianRiversHighRes.csv") %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(system_index, area, ciudad, mean)
+
+p90 <- readr::read_csv("p90RiversHighRes.csv") %>% 
+  janitor::clean_names() %>% 
+  dplyr::select(system_index, area, ciudad, mean) %>% 
+  rename(Rivers_p90 = mean) %>% 
+  dplyr::select(system_index, area, ciudad, Rivers_p90)
+
+p10 <- readr::read_csv("p10RiversHighRes.csv")%>% 
+  janitor::clean_names() %>% 
+  dplyr::select(system_index, area, ciudad, mean) %>% 
+  rename(Rivers_p10 = mean) %>% 
+  dplyr::select(system_index, area, ciudad, Rivers_p10)
+
+NewVariables2 <- list(median, p90, p10) %>% 
+  purrr::reduce(full_join) %>% 
+  dplyr::select(-system_index) %>% 
+  dplyr::group_by(ciudad) %>%
+  summarise_at(c("mean", "Rivers_p90", "Rivers_p10"), ~weighted.mean(.x, w = area), na.rm = TRUE) %>% 
+  rename(Rivers_median = mean)
+
+
+NewVariables <- full_join(NewVariables, NewVariables2)
+```
+
+And we export them as an Rds
+
+```{r}
+saveRDS(NewVariables, "NewVariables.rds")
+```
+
+# Final table
+
+Here you can see the final result
+
+```{r, echo = F}
+knitr::kable(NewVariables)
+```
+
