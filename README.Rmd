@@ -117,4 +117,106 @@ ToZip <- list.files(pattern = "AllCities")
 zip(files = ToZip, zipfile = "TotalCitiesAll.zip")
 ```
 
+## Cleaned files link to GEE and shiny explorer
+
+In order to explore the maps, you can use the following app to open a shiny app
+
+```{r, eval = F}
+shiny::runGitHub("derek-corcoran-barrios/ExploradorComunas")
+```
+
+The ingested shapefiles are in this [link](https://code.earthengine.google.com/?asset=projects/ee-my-derekcorcoran/assets/TotalCitiesAll) as an asset in google earth engine
+
+# CO pollution analysis
+
+From this we analized the CO content
+
+## Load assets and datasets
+
+We load the cities shapefiles and also the copernicus CO concentration from this [link](https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S5P_NRTI_L3_CO), this last layer was filtered from January 1st of 2018 to December 31st of 2019 to encompass two years
+
+```{js, eval = F}
+var fc = ee.FeatureCollection("projects/ee-my-derekcorcoran/assets/TotalCitiesAll");
+
+var collection = ee.ImageCollection('COPERNICUS/S5P/NRTI/L3_CO')
+  .select('CO_column_number_density')
+  .filterDate('2018-01-01', '2019-12-31');
+```
+
+Then we generate a composite image where each pixel has either the median, the 90th percentile or the 10th percentile
+
+```{js, eval = F}
+// Reduce the collection by taking the median.
+var median = collection.median();
+
+var p90 = collection.reduce(ee.Reducer.percentile([90]));
+
+var p10 = collection.reduce(ee.Reducer.percentile([10]));
+```
+
+We then use reduce regions in order to get the median of all pixels for each polygon for each variable, that is we get the median of the medians, or the median of the 90th percentile and the median of the 10th percentile for each variable
+
+```{js, eval = F}
+var cityCOMedian = median.reduceRegions({
+  collection: fc,
+  reducer: ee.Reducer.median(),
+  scale: 1113.1949079327357 // the resolution of the GRIDMET dataset
+});
+
+var cityCOp90 = p90.reduceRegions({
+  collection: fc,
+  reducer: ee.Reducer.median(),
+  scale: 1113.1949079327357 // the resolution of the GRIDMET dataset
+});
+
+var cityCOp10 = p10.reduceRegions({
+  collection: fc,
+  reducer: ee.Reducer.median(),
+  scale: 1113.1949079327357 // the resolution of the GRIDMET dataset
+});
+```
+
+Finally we only retain the name of the city, the area and the median value to then export it as a csv to google drive
+
+```{js, eval = F}
+var multiProp = cityCOMedian.select({
+  propertySelectors: ['Ciudad', 'Area', 'median'],
+  retainGeometry: false
+});
+
+var multiPropP90 = cityCOp90.select({
+  propertySelectors: ['Ciudad', 'Area', 'median'],
+  retainGeometry: false
+});
+
+var multiPropP10 = cityCOp10.select({
+  propertySelectors: ['Ciudad', 'Area', 'median'],
+  retainGeometry: false
+});
+
+
+
+
+Export.table.toDrive({
+  collection: multiProp,
+  description: 'medianHighRes',
+  folder: 'RegulatingServicesLayers',
+  fileFormat: 'csv'
+});
+
+Export.table.toDrive({
+  collection: multiPropP90,
+  description: 'p90COHighRes',
+  folder: 'RegulatingServicesLayers',
+  fileFormat: 'csv'
+});
+
+Export.table.toDrive({
+  collection: multiPropP10,
+  description: 'p10COHighRes',
+  folder: 'RegulatingServicesLayers',
+  fileFormat: 'csv'
+});
+
+```
 
